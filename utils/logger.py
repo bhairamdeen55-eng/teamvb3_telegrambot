@@ -12,14 +12,22 @@ class InterceptHandler(logging.Handler):
             level = logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        frame, depth = sys._getframe(6), 6
+        
+        # Safe frame depth detection
+        frame = sys._getframe(1)
+        depth = 0
         while frame and frame.f_code.co_filename == logging.__file__:
             frame = frame.f_back
             depth += 1
+        
         logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
 def setup_logging() -> None:
     log_path = settings.LOG_DIR / "bot.log"
+    
+    # Ensure log directory exists
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    
     logger.remove()
     
     # Console
@@ -56,4 +64,4 @@ def setup_logging() -> None:
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("openai").setLevel(logging.WARNING)
     
-    logger.info("Logging initialized | Level: %s | File: %s", settings.LOG_LEVEL, log_path)
+    logger.info(f"Logging initialized | Level: {settings.LOG_LEVEL} | File: {log_path}")
