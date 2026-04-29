@@ -1,8 +1,9 @@
 # config.py
 from pydantic_settings import BaseSettings
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, field_validator
 from typing import Optional
 from pathlib import Path
+import os
 
 class Settings(BaseSettings):
     # Bot
@@ -13,7 +14,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = Field("sqlite+aiosqlite:///data/bot.db", validation_alias="DATABASE_URL")
     DB_POOL_SIZE: int = Field(20, ge=1, le=100)
-    DB_MAX_OVERFLOW: int = Field(10, ge=0)
+    DB_MAX_OVERFLOW: int = Field(10, ge=0, le=50)
     
     # AI / Vision
     AI_PROVIDER: str = Field("openai", validation_alias="AI_PROVIDER")
@@ -36,7 +37,7 @@ class Settings(BaseSettings):
     # Security
     ENCRYPTION_KEY: Optional[str] = None
     JWT_SECRET: Optional[str] = None
-    SESSION_TTL: int = 86400
+    SESSION_TTL: int = Field(86400, ge=300, le=2592000)
     
     # Paths
     DATA_DIR: Path = Field(Path("data"))
@@ -44,12 +45,12 @@ class Settings(BaseSettings):
     ASSETS_DIR: Path = Field(Path("assets"))
     
     # Logging
-    LOG_LEVEL: str = "INFO"
+    LOG_LEVEL: str = Field("INFO")
     SENTRY_DSN: Optional[str] = None
     
     # Subscription
-    FREE_TRIAL_DAYS: int = 7
-    SUBSCRIPTION_CHECK_INTERVAL: int = 3600
+    FREE_TRIAL_DAYS: int = Field(7, ge=1, le=365)
+    SUBSCRIPTION_CHECK_INTERVAL: int = Field(3600, ge=300, le=86400)
 
     model_config = {
         "env_file": ".env",
@@ -59,12 +60,36 @@ class Settings(BaseSettings):
         "validate_default": True,
     }
 
-    def model_post_init(self, __context):
-        self.DATA_DIR.mkdir(parents=True, exist_ok=True)
-        self.LOG_DIR.mkdir(parents=True, exist_ok=True)
-        if isinstance(self.ADMIN_IDS, str):
-            self.ADMIN_IDS = [int(x.strip()) for x in self.ADMIN_IDS.split(",") if x.strip().isdigit()]
-        if self.THROTTLE_RATE > self.THROTTLE_BURST:
-            raise ValueError("THROTTLE_BURST must be >= THROTTLE_RATE")
+    @field_validator("ADMIN_IDS", mode="before")
+    @classmethod
+    def parse_admin_ids(cls, v):
+        """Parse ADMIN_IDS from string or list format."""
+        if isinstance(v, str):
+            return [int(x.strip()) for x in v.split(",") if x.strip().isdigit()]
+        return v if isinstance(v, list) else []
 
-settings = Settings()
+    @field_validator("THROTTLE_BURST")
+    @classmethod
+    def validate_throttle_burst(cls, v, info):
+        """Ensure THROTTLE_BURST >= THROTTLE_RATE."""
+        throttle_rate = info.data.get("THROTTLE_RATE", 3)
+        if v < throttle_rate:
+            raise ValueError(f"THROTTLE_BURST ({v}) must be >= THROTTLE_RATE ({throttle_rate})")
+        return v
+
+    def model_post_init(self, __context):
+        """Initialize directories after model validation."""
+        try:
+            self.DATA_DIR.mkdir(parents=True, exist_ok=True)
+            self.LOG_DIR.mkdir(parents=True, exist_ok=True)
+            self.ASSETS_DIR.mkdir(parents=True, exist_ok=True)
+        except Exception as e:
+            raise RuntimeError(f"Failed to create directories: {e}")
+
+
+# Load settings with error handling
+try:
+    settings = Settings()
+except Exception as e:
+    print(f"Error loading configuration: {e}")
+    raise
