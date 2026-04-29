@@ -3,12 +3,13 @@ from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, Asyn
 from sqlalchemy.orm import DeclarativeBase
 from config import settings
 from loguru import logger
+from typing import AsyncGenerator, Optional
 
 class Base(DeclarativeBase):
     pass
 
-engine: AsyncEngine = None
-async_session_factory: async_sessionmaker[AsyncSession] = None
+engine: Optional[AsyncEngine] = None
+async_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
 async def init_db() -> None:
     global engine, async_session_factory
@@ -24,9 +25,9 @@ async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     
-    logger.info("Database initialized | URL: %s", settings.db_uri_safe)
+    logger.info("Database initialized | URL: %s", settings.DATABASE_URL)
 
-async def get_session() -> AsyncSession:
+async def get_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_factory() as session:
         try:
             yield session
