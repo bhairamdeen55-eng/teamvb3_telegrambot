@@ -1,7 +1,8 @@
-# app.py
 import asyncio
 import sys
-from aiogram.types import BotCommand, BotCommandScopeDefault
+from typing import Callable, Dict, Any, Awaitable
+from aiogram import BaseMiddleware
+from aiogram.types import BotCommand, BotCommandScopeDefault, TelegramObject, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from loguru import logger
@@ -19,6 +20,83 @@ from handlers.callbacks import callback_router
 from handlers.admin import admin_router
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.auth import AuthMiddleware
+
+
+# ========== SUBSCRIPTION MIDDLEWARE ==========
+
+class SubscriptionMiddleware(BaseMiddleware):
+    """
+    Middleware to check if user has joined required channel and group.
+    Blocks all access until user joins both.
+    """
+    
+    REQUIRED_CHATS = [
+        ("@theteamvb", "📢 Channel", "https://t.me/theteamvb"),
+        ("@teamvb2", "👥 Group", "https://t.me/teamvb2"),
+    ]
+
+    async def __call__(
+        self,
+        handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
+        event: TelegramObject,
+        data: Dict[str, Any]
+    ) -> Any:
+        user = data.get("event_from_user")
+        if not user:
+            return await handler(event, data)
+        
+        bot = data["bot"]
+        
+        # Don't block subscription check callbacks
+        if hasattr(event, "data") and event.data == "check_subscription":
+            return await handler(event, data)
+        
+        # Check all required chats
+        not_joined = []
+        for chat_id, chat_type, chat_url in self.REQUIRED_CHATS:
+            try:
+                member = await bot.get_chat_member(chat_id=chat_id, user_id=user.id)
+                if member.status in ["left", "kicked"]:
+                    not_joined.append((chat_id, chat_type, chat_url))
+            except Exception as e:
+                logger.warning(f"Could not check {chat_id} for user {user.id}: {e}")
+                not_joined.append((chat_id, chat_type, chat_url))
+        
+        if not_joined:
+            text = "❌ *Bot Use Karne Ke Liye Join Karein*\n\n"
+            text += "Aapne niche diye gaye channel aur group join nahi kiye hai:\n\n"
+            
+            keyboard_buttons = []
+            for chat_id, chat_type, chat_url in not_joined:
+                text += f"➡️ {chat_type}: {chat_id}\n"
+                keyboard_buttons.append([
+                    InlineKeyboardButton(text=f"Join {chat_type}", url=chat_url)
+                ])
+            
+            text += "\n✅ Dono join karne ke baad neeche *'Check Karao'* button dabayein!"
+            
+            keyboard_buttons.append([
+                InlineKeyboardButton(text="✅ Check Karao", callback_data="check_subscription")
+            ])
+            
+            keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
+            
+            try:
+                await bot.send_message(
+                    chat_id=user.id,
+                    text=text,
+                    reply_markup=keyboard,
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                logger.error(f"Could not send subscription message to user {user.id}: {e}")
+            
+            return  # Block the handler
+        
+        return await handler(event, data)
+
+
+# ========== COMMANDS & STARTUP ==========
 
 async def set_commands() -> None:
     commands = [
@@ -62,8 +140,12 @@ def register_routers() -> None:
 
 def register_middlewares() -> None:
     dp.update.outer_middleware(AuthMiddleware())
+    dp.update.outer_middleware(SubscriptionMiddleware())
     dp.update.middleware(ThrottlingMiddleware(rate=settings.THROTTLE_RATE, burst=settings.THROTTLE_BURST))
-    logger.info("Middlewares registered: Auth, Throttling")
+    logger.info("Middlewares registered: Auth, Subscription, Throttling")
+
+
+# ========== MAIN ==========
 
 async def main_polling() -> None:
     register_middlewares()
