@@ -1,0 +1,78 @@
+{
+  "quizzes": [
+    {
+      "title": "Mathematics Basics",
+      "description": "Test your basic math skills",
+      "topic": "Mathematics",
+      "difficulty": "easy",
+      "questions": [
+        {
+          "question_text": "What is 7 × 8?",
+          "options": ["54", "56", "58", "64"],
+          "correct_answer": "B",
+          "explanation": "7 × 8 = 56",
+          "marks": 1.0,
+          "order": 0
+        },
+        {
+          "question_text": "What is the square root of 144?",
+          "options": ["10", "11", "12", "13"],
+          "correct_answer": "C",
+          "explanation": "12² = 144",
+          "marks": 1.0,
+          "order": 1
+        },
+        {
+          "question_text": "What is 25% of 200?",
+          "options": ["25", "40", "50", "75"],
+          "correct_answer": "C",
+          "explanation": "25% = 1/4, 200/4 = 50",
+          "marks": 2.0,
+          "order": 2
+        }
+      ]
+    },
+    {
+      "title": "Physics: Motion",
+      "description": "Test your knowledge of motion in physics",
+      "topic": "Physics",
+      "difficulty": "medium",
+      "questions": [
+        {
+          "question_text": "What is the SI unit of force?",
+          "options": ["Newton", "Joule", "Watt", "Pascal"],
+          "correct_answer": "A",
+          "explanation": "Force is measured in Newtons (N)",
+          "marks": 1.0,
+          "order": 0
+        },
+        {
+          "question_text": "Newton's First Law is also known as:",
+          "options": ["Law of Acceleration", "Law of Inertia", "Action-Reaction", "Universal Gravitation"],
+          "correct_answer": "B",
+          "explanation": "Newton's First Law is the Law of Inertia",
+          "marks": 1.0,
+          "order": 1
+        }
+      ]
+    }
+  ],
+  "dpps": [
+    {
+      "title": "Calculus Practice Set 1",
+      "topic": "Mathematics",
+      "difficulty": "hard",
+      "problem_count": 5,
+      "content": {
+        "description": "Practice differentiation and integration problems",
+        "problems": [
+          "Find dy/dx if y = x³ + 2x² - 5x + 7",
+          "Evaluate ∫(3x² + 2x)dx",
+          "Find the derivative of sin(x²)",
+          "Evaluate ∫₀¹ x²dx",
+          "Find d²y/dx² if y = eˣ sin(x)"
+        ]
+      }
+    }
+  ]
+}
