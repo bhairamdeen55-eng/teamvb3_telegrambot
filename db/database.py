@@ -1,40 +1,67 @@
 # db/database.py
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker, AsyncSession, AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
-from config import settings
-from loguru import logger
-from typing import AsyncGenerator, Optional
+from sqlalchemy.pool import NullPool, AsyncAdaptedQueuePool
 
+from config import settings
+
+
+def _make_engine():
+    """
+    SQLite aur PostgreSQL dono handle karta hai.
+    SQLite: pool_size/max_overflow support nahi karta — NullPool use karo.
+    PostgreSQL: AsyncAdaptedQueuePool use hoga with pool settings.
+    """
+    is_sqlite = "sqlite" in settings.DATABASE_URL
+
+    if is_sqlite:
+        return create_async_engine(
+            settings.DATABASE_URL,
+            poolclass=NullPool,
+            connect_args={"check_same_thread": False},
+            echo=False,
+        )
+    else:
+        return create_async_engine(
+            settings.DATABASE_URL,
+            poolclass=AsyncAdaptedQueuePool,
+            pool_size=settings.DB_POOL_SIZE,
+            max_overflow=settings.DB_MAX_OVERFLOW,
+            pool_pre_ping=True,
+            echo=False,
+        )
+
+
+# ── Engine & Session ──────────────────────────────────────────
+engine = _make_engine()
+
+AsyncSessionLocal = async_sessionmaker(
+    bind=engine,
+    class_=AsyncSession,
+    expire_on_commit=False,
+)
+
+
+# ── Base Model ────────────────────────────────────────────────
 class Base(DeclarativeBase):
     pass
 
-engine: Optional[AsyncEngine] = None
-async_session_factory: Optional[async_sessionmaker[AsyncSession]] = None
 
+# ── Init DB ───────────────────────────────────────────────────
 async def init_db() -> None:
-    global engine, async_session_factory
-    engine = create_async_engine(
-        settings.DATABASE_URL,
-        pool_size=settings.DB_POOL_SIZE,
-        max_overflow=settings.DB_MAX_OVERFLOW,
-        echo=False,
-        connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
-    )
-    async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    
+    """Saari tables create karo startup pe."""
+    from db import models  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-    
-    logger.info("Database initialized | URL: %s", settings.DATABASE_URL)
 
-async def get_session() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
-        try:
-            yield session
-        finally:
-            await session.close()
 
 async def close_db() -> None:
-    if engine:
-        await engine.dispose()
-        logger.info("Database connection closed")
+    """Shutdown pe engine dispose karo."""
+    await engine.dispose()
+
+
+# ── Session Dependency ────────────────────────────────────────
+async def get_session() -> AsyncSession:
+    async with AsyncSessionLocal() as session:
+        yield session
+        
