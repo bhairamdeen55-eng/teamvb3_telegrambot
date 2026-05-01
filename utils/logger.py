@@ -1,67 +1,43 @@
 # utils/logger.py
 import sys
-import json
-import logging
 from pathlib import Path
 from loguru import logger
-from config import settings
 
-class InterceptHandler(logging.Handler):
-    def emit(self, record: logging.LogRecord) -> None:
-        try:
-            level = logger.level(record.levelname).name
-        except ValueError:
-            level = record.levelno
-        
-        # Safe frame depth detection
-        frame = sys._getframe(1)
-        depth = 0
-        while frame and frame.f_code.co_filename == logging.__file__:
-            frame = frame.f_back
-            depth += 1
-        
-        logger.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
 
-def setup_logging() -> None:
-    log_path = settings.LOG_DIR / "bot.log"
-    
-    # Ensure log directory exists
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    
+def setup_logging(log_level: str = "INFO", log_file: str = "logs/bot.log") -> None:
+    """Loguru logging setup — Railway aur local dono ke liye."""
+
+    # Pehle default handler remove karo
     logger.remove()
-    
-    # Console
+
+    # ── Console Handler ───────────────────────────────────────
+    # NOTE: {time} mein quotes nahi hone chahiye — yeh KeyError fix hai
     logger.add(
         sys.stdout,
-        level=settings.LOG_LEVEL,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan> | <level>{message}</level>",
+        level=log_level,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | "
+               "<level>{level: <8}</level> | "
+               "<cyan>{name}</cyan>:<cyan>{line}</cyan> | "
+               "<level>{message}</level>",
         colorize=True,
     )
+
+    # ── File Handler ──────────────────────────────────────────
+    try:
+        log_path = Path(log_file)
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+
+        logger.add(
+            log_file,
+            level=log_level,
+            format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {name}:{line} | {message}",
+            rotation="10 MB",
+            retention="7 days",
+            compression="zip",
+            encoding="utf-8",
+        )
+    except Exception as e:
+        logger.warning(f"File logging setup failed: {e} — only console logging active")
+
+    logger.info(f"Logging initialized | Level: {log_level} | File: {log_file}")
     
-    # File (JSON)
-    logger.add(
-        log_path,
-        level=settings.LOG_LEVEL,
-        format=lambda r: json.dumps({
-            "timestamp": r["time"].isoformat(),
-            "level": r["level"].name,
-            "module": r["name"],
-            "function": r["function"],
-            "line": r["line"],
-            "message": r["message"],
-        }, default=str),
-        rotation="100 MB",
-        retention="30 days",
-        compression="gz",
-    )
-    
-    # Intercept standard logging
-    logging.basicConfig(handlers=[InterceptHandler()], level=0, force=True)
-    
-    # Silence noisy libs
-    logging.getLogger("aiogram").setLevel(logging.WARNING)
-    logging.getLogger("sqlalchemy").setLevel(logging.WARNING)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
-    logging.getLogger("openai").setLevel(logging.WARNING)
-    
-    logger.info(f"Logging initialized | Level: {settings.LOG_LEVEL} | File: {log_path}")
