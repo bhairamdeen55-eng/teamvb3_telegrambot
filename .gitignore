@@ -1,29 +1,51 @@
+# ── Environment ───────────────────────────────────────────────
 .env
-.env.*
+.env.local
+.env.production
+.env.staging
+# .env.example is NOT ignored — it goes to GitHub as template
+
+# ── Python ────────────────────────────────────────────────────
 __pycache__/
 *.py[cod]
 *.egg-info/
 dist/
 build/
 *.egg
+
+# ── Virtual Environment ───────────────────────────────────────
 .venv/
 venv/
+
+# ── Database ──────────────────────────────────────────────────
 data/
 *.db
 *.sqlite
+
+# ── Logs ──────────────────────────────────────────────────────
 logs/
 *.log
+
+# ── IDE ───────────────────────────────────────────────────────
 .vscode/
 .idea/
 *.swp
 *.swo
+
+# ── OS ────────────────────────────────────────────────────────
 .DS_Store
 Thumbs.db
+
+# ── Security ──────────────────────────────────────────────────
 *.pem
 *.key
 *.crt
 secrets/
+
+# ── Testing ───────────────────────────────────────────────────
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ── Bot Session ───────────────────────────────────────────────
 bot_session/
