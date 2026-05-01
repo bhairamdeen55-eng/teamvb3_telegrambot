@@ -124,6 +124,11 @@ class Settings(BaseSettings):
     def webhook_secret_value(self) -> str | None:
         return self.WEBHOOK_SECRET.get_secret_value() if self.WEBHOOK_SECRET else None
 
+    @property
+    def is_webhook_mode(self) -> bool:
+        """app.py mein use hota hai — webhook on/off check karne ke liye."""
+        return self.USE_WEBHOOK and bool(self.WEBHOOK_URL)
+
 
 # ── Load Settings ─────────────────────────────────────────────────────────────
 try:
