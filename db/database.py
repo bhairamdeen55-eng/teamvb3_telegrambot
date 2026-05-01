@@ -42,6 +42,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+# Alias — __init__.py aur baaki files ke saath compatible
+async_session_factory = AsyncSessionLocal
+
 # ── Base Model ────────────────────────────────────────────────
 class Base(DeclarativeBase):
     pass
@@ -64,3 +67,4 @@ async def close_db() -> None:
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
+        
