@@ -64,4 +64,3 @@ async def close_db() -> None:
 async def get_session() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
-        
