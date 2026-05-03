@@ -25,11 +25,6 @@ from middlewares.auth import AuthMiddleware
 # ========== SUBSCRIPTION MIDDLEWARE ==========
 
 class SubscriptionMiddleware(BaseMiddleware):
-    """
-    Middleware to check if user has joined required channel and group.
-    Blocks all access until user joins both.
-    """
-    
     REQUIRED_CHATS = [
         ("@theteamvb", "📢 Channel", "https://t.me/theteamvb"),
         ("@teamvb2", "👥 Group", "https://t.me/teamvb2"),
@@ -44,55 +39,54 @@ class SubscriptionMiddleware(BaseMiddleware):
         user = data.get("event_from_user")
         if not user:
             return await handler(event, data)
-        
-        bot = data["bot"]
-        
-        # Don't block subscription check callbacks
+
+        bot_instance = data["bot"]
+
+        # Subscription check callback block mat karo
         if hasattr(event, "data") and event.data == "check_subscription":
             return await handler(event, data)
-        
-        # Check all required chats
+
+        # Saare required chats check karo
         not_joined = []
         for chat_id, chat_type, chat_url in self.REQUIRED_CHATS:
             try:
-                member = await bot.get_chat_member(chat_id=chat_id, user_id=user.id)
+                member = await bot_instance.get_chat_member(chat_id=chat_id, user_id=user.id)
                 if member.status in ["left", "kicked"]:
                     not_joined.append((chat_id, chat_type, chat_url))
             except Exception as e:
+                # ✅ FIX: Check fail hone pe block MAT karo — gracefully pass karo
                 logger.warning(f"Could not check {chat_id} for user {user.id}: {e}")
-                not_joined.append((chat_id, chat_type, chat_url))
-        
+
         if not_joined:
             text = "❌ *Bot Use Karne Ke Liye Join Karein*\n\n"
             text += "Aapne niche diye gaye channel aur group join nahi kiye hai:\n\n"
-            
+
             keyboard_buttons = []
             for chat_id, chat_type, chat_url in not_joined:
                 text += f"➡️ {chat_type}: {chat_id}\n"
                 keyboard_buttons.append([
                     InlineKeyboardButton(text=f"Join {chat_type}", url=chat_url)
                 ])
-            
+
             text += "\n✅ Dono join karne ke baad neeche *'Check Karao'* button dabayein!"
-            
             keyboard_buttons.append([
                 InlineKeyboardButton(text="✅ Check Karao", callback_data="check_subscription")
             ])
-            
+
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-            
+
             try:
-                await bot.send_message(
+                await bot_instance.send_message(
                     chat_id=user.id,
                     text=text,
                     reply_markup=keyboard,
                     parse_mode="Markdown"
                 )
             except Exception as e:
-                logger.error(f"Could not send subscription message to user {user.id}: {e}")
-            
-            return  # Block the handler
-        
+                logger.error(f"Could not send subscription message to {user.id}: {e}")
+
+            return  # Handler block karo
+
         return await handler(event, data)
 
 
@@ -141,7 +135,10 @@ def register_routers() -> None:
 def register_middlewares() -> None:
     dp.update.outer_middleware(AuthMiddleware())
     dp.update.outer_middleware(SubscriptionMiddleware())
-    dp.update.middleware(ThrottlingMiddleware(rate=settings.THROTTLE_RATE, burst=settings.THROTTLE_BURST))
+    dp.update.middleware(ThrottlingMiddleware(
+        rate=settings.THROTTLE_RATE,
+        burst=settings.THROTTLE_BURST
+    ))
     logger.info("Middlewares registered: Auth, Subscription, Throttling")
 
 
@@ -152,7 +149,10 @@ async def main_polling() -> None:
     register_routers()
     await on_startup()
     try:
-        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
+        await dp.start_polling(
+            bot,
+            allowed_updates=dp.resolve_used_update_types()
+        )
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
@@ -183,3 +183,4 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped by user")
         sys.exit(0)
+        
