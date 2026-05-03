@@ -20,7 +20,7 @@ async def pagination_callback(callback: CallbackQuery) -> None:
 
 @callback_router.callback_query(F.data == "check_subscription")
 async def check_subscription_callback(callback: CallbackQuery, bot: Bot) -> None:
-    await callback.answer()  # तुरंत बटन बंद
+    await callback.answer()
     user = callback.from_user
     chats_to_check = [
         ("@theteamvb", "📢 Channel"),
@@ -58,7 +58,6 @@ async def check_subscription_callback(callback: CallbackQuery, bot: Bot) -> None
         )
 
 # ========== MAIN MENU ==========
-
 @callback_router.callback_query(F.data == "menu_quiz")
 async def menu_quiz_handler(callback: CallbackQuery) -> None:
     await callback.answer()
@@ -122,8 +121,8 @@ async def menu_help_handler(callback: CallbackQuery) -> None:
     await callback.message.edit_text(
         "❓ <b>Help</b>\n\n"
         "Use /menu to see all features.\n"
-        "Use /quiz for topic-wise quizzes.\n"
-        "Use /dpp for Daily Practice Problems.\n"
+        "/quiz for topic-wise quizzes.\n"
+        "/dpp for Daily Practice Problems.\n"
         "Upload handwritten answers for AI evaluation.\n\n"
         "For any issues, contact @theteamvb.",
         reply_markup=back_kb("menu")
@@ -138,27 +137,32 @@ async def back_to_main_menu(callback: CallbackQuery) -> None:
     )
 
 # ========== TOPIC / SUBJECT SELECTION ==========
-
 @callback_router.callback_query(F.data.startswith("quiz_topic_"))
 async def quiz_topic_handler(callback: CallbackQuery):
     await callback.answer()
     topic = callback.data.replace("quiz_topic_", "")
-    text = f"✅ You selected *{topic}* for Quiz.\n\n🔄 Loading your quiz... (feature coming soon)"
-    await callback.message.edit_text(text, reply_markup=back_kb("menu"))
+    await callback.message.edit_text(
+        f"✅ You selected *{topic}* for Quiz.\n\n🔄 Loading...",
+        reply_markup=back_kb("menu")
+    )
 
 @callback_router.callback_query(F.data.startswith("dpp_topic_"))
 async def dpp_topic_handler(callback: CallbackQuery):
     await callback.answer()
     topic = callback.data.replace("dpp_topic_", "")
-    text = f"✅ You selected *{topic}* for DPP.\n\n🔄 Loading practice problems... (feature coming soon)"
-    await callback.message.edit_text(text, reply_markup=back_kb("menu"))
+    await callback.message.edit_text(
+        f"✅ You selected *{topic}* for DPP.\n\n🔄 Loading...",
+        reply_markup=back_kb("menu")
+    )
 
 @callback_router.callback_query(F.data.startswith("subject:"))
 async def subject_handler(callback: CallbackQuery):
     await callback.answer()
     subject = callback.data.split(":")[1]
-    text = f"✅ You selected *{subject}*.\n\nThis feature is under development."
-    await callback.message.edit_text(text, reply_markup=back_kb("menu"))
+    await callback.message.edit_text(
+        f"✅ You selected *{subject}*.\n\nThis feature is under development.",
+        reply_markup=back_kb("menu")
+    )
 
 @callback_router.callback_query(F.data == "gk")
 async def gk_callback_handler(callback: CallbackQuery):
