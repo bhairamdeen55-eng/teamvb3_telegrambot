@@ -18,6 +18,7 @@ from handlers.menu import menu_router
 from handlers.quiz import quiz_router
 from handlers.dpp import dpp_router
 from handlers.photo_test import photo_test_router
+from handlers.pdf_test import pdf_test_router          # ✅ नया PDF राउटर
 from handlers.callbacks import callback_router
 from handlers.admin import admin_router
 from middlewares.throttling import ThrottlingMiddleware
@@ -141,15 +142,16 @@ async def on_shutdown() -> None:
 def register_routers() -> None:
     dp.include_router(start_router)
     dp.include_router(menu_router)
-    dp.include_router(callback_router)      # ← callback router
+    dp.include_router(callback_router)
     dp.include_router(quiz_router)
     dp.include_router(dpp_router)
     dp.include_router(photo_test_router)
+    dp.include_router(pdf_test_router)      # ✅ PDF राउटर जोड़ा गया
     dp.include_router(admin_router)
     logger.info("All routers registered")
 
 def register_middlewares() -> None:
-    # ✅ अब सिर्फ message पर लगाएँ — callback/query पर नहीं
+    # सिर्फ message पर लगाएँ — callback पर नहीं (तेज़ रेस्पॉन्स के लिए)
     dp.message.middleware(AuthMiddleware())
     dp.message.middleware(SubscriptionMiddleware())
     dp.message.middleware(ThrottlingMiddleware(
