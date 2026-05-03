@@ -141,7 +141,7 @@ async def on_shutdown() -> None:
 def register_routers() -> None:
     dp.include_router(start_router)
     dp.include_router(menu_router)
-    dp.include_router(callback_router)      # ← यहीं से बटन जीवित होते हैं
+    dp.include_router(callback_router)      # ← callback router
     dp.include_router(quiz_router)
     dp.include_router(dpp_router)
     dp.include_router(photo_test_router)
@@ -149,13 +149,14 @@ def register_routers() -> None:
     logger.info("All routers registered")
 
 def register_middlewares() -> None:
-    dp.update.outer_middleware(AuthMiddleware())
-    dp.update.outer_middleware(SubscriptionMiddleware())
-    dp.update.middleware(ThrottlingMiddleware(
+    # ✅ अब सिर्फ message पर लगाएँ — callback/query पर नहीं
+    dp.message.middleware(AuthMiddleware())
+    dp.message.middleware(SubscriptionMiddleware())
+    dp.message.middleware(ThrottlingMiddleware(
         rate=settings.THROTTLE_RATE,
         burst=settings.THROTTLE_BURST
     ))
-    logger.info("Middlewares registered: Auth, Subscription, Throttling")
+    logger.info("Middlewares registered: Auth, Subscription, Throttling (message only)")
 
 
 # ========== MAIN ==========
