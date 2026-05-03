@@ -19,13 +19,11 @@ class Settings(BaseSettings):
     DB_POOL_SIZE: int = Field(20, ge=1, le=100)
     DB_MAX_OVERFLOW: int = Field(10, ge=0, le=50)
 
-    # ── AI / OpenAI ───────────────────────────────────────────
-    AI_PROVIDER: str = Field("openai", validation_alias="AI_PROVIDER")
-    AI_API_KEY: Optional[SecretStr] = Field(None, validation_alias="AI_API_KEY")
-    AI_MODEL: str = Field("gpt-4o-mini", validation_alias="AI_MODEL")
+    # ── AI / OpenRouter ───────────────────────────────────────
+    OPENROUTER_API_KEY: Optional[SecretStr] = Field(None, validation_alias="OPENROUTER_API_KEY")
+    AI_MODEL: str = Field("openrouter/llama-3.2-11b-vision-instruct", validation_alias="AI_MODEL")
     AI_TEMPERATURE: float = Field(0.3, ge=0.0, le=2.0)
     AI_MAX_TOKENS: int = Field(2048, ge=64, le=8192)
-    VISION_MODEL: str = Field("gpt-4o-mini", validation_alias="VISION_MODEL")
 
     # ── Throttling ────────────────────────────────────────────
     THROTTLE_RATE: int = Field(3, ge=1, le=30)
@@ -121,8 +119,8 @@ class Settings(BaseSettings):
         return self.BOT_TOKEN.get_secret_value()
 
     @property
-    def ai_api_key(self) -> str | None:
-        return self.AI_API_KEY.get_secret_value() if self.AI_API_KEY else None
+    def openrouter_api_key_value(self) -> str | None:
+        return self.OPENROUTER_API_KEY.get_secret_value() if self.OPENROUTER_API_KEY else None
 
     @property
     def webhook_secret_value(self) -> str | None:
@@ -131,10 +129,8 @@ class Settings(BaseSettings):
     @property
     def is_webhook_mode(self) -> bool:
         """Railway ya manual webhook setting ke hisaab se mode decide karo."""
-        # Agar Railway ne domain diya hai to auto webhook mode ON
         if self.RAILWAY_PUBLIC_DOMAIN:
             return True
-        # Manual webhook setting
         return self.USE_WEBHOOK and bool(self.WEBHOOK_URL)
 
 
