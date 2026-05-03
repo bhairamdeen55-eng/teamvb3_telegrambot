@@ -4,52 +4,82 @@ from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
 from loguru import logger
-from states.admin_states import AdminStates
-from utils.keyboards import admin_menu_kb, back_kb, yes_no_kb
-from db.models import User, UserRole
-from db.crud import UserCRUD, QuizCRUD
+
 from config import settings
+from db.database import async_session_factory
+from db.models import User
+from sqlalchemy import select, func
 
 admin_router = Router()
 
+# ========== TEMPORARY STATES (बाद में states/admin_states.py में शिफ्ट करें) ==========
+class AdminStates(StatesGroup):
+    broadcast_text = State()
+    broadcast_confirm = State()
 
-def check_admin(user_id: int, user_obj=None) -> bool:
-    """
-    2 tarike se admin check karo:
-    1. ADMIN_IDS mein hai (config se)
-    2. DB mein role ADMIN/SUPERADMIN hai
-    """
-    if user_id in settings.ADMIN_IDS:
-        return True
-    if user_obj and hasattr(user_obj, 'role'):
-        return user_obj.role in (UserRole.ADMIN, UserRole.SUPERADMIN)
-    return False
+# ========== HELPER KEYBOARDS (स्टब्स – बाद में utils/keyboards.py में ऐड करें) ==========
+def admin_menu_kb():
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="📊 Stats", callback_data="admin_stats")
+    builder.button(text="📢 Broadcast", callback_data="admin_broadcast")
+    builder.adjust(1)
+    return builder.as_markup()
 
+def back_kb(return_to: str = "admin"):
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="🔙 Back", callback_data=f"admin_{return_to}")
+    return builder.as_markup()
+
+def yes_no_kb(confirm_callback: str, cancel_callback_data: str = "admin"):
+    from aiogram.utils.keyboard import InlineKeyboardBuilder
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Yes", callback_data=confirm_callback)
+    builder.button(text="❌ No", callback_data=f"admin_{cancel_callback_data}")
+    return builder.as_markup()
+
+# ========== ADMIN CHECK ==========
+
+def check_admin(user_id: int) -> bool:
+    """config के ADMIN_IDS में है तो admin"""
+    return user_id in settings.ADMIN_IDS
+
+# ========== COMMANDS ==========
 
 @admin_router.message(Command("admin"))
-async def admin_panel(message: Message, user=None) -> None:
-    if not check_admin(message.from_user.id, user):
+async def admin_panel(message: Message) -> None:
+    if not check_admin(message.from_user.id):
         await message.answer("⛔ Admin access required.")
         return
     await message.answer("⚙️ <b>Admin Panel</b>", reply_markup=admin_menu_kb())
 
+@admin_router.message(Command("stats"))
+async def quick_stats(message: Message) -> None:
+    if not check_admin(message.from_user.id):
+        return
+    async with async_session_factory() as session:
+        total_users = (await session.execute(select(func.count(User.id)))).scalar()
+    await message.answer(f"👥 Total Users: {total_users}")
+
+# ========== CALLBACKS ==========
 
 @admin_router.callback_query(F.data.startswith("admin_"))
-async def admin_callback(callback: CallbackQuery, user=None, session=None) -> None:
-    if not check_admin(callback.from_user.id, user):
+async def admin_callback(callback: CallbackQuery) -> None:
+    if not check_admin(callback.from_user.id):
         await callback.answer("⛔ Unauthorized", show_alert=True)
         return
 
     action = callback.data.replace("admin_", "")
 
     if action == "stats":
-        total_users = await UserCRUD.get_user_count(session)
-        total_quizzes = len(await QuizCRUD.get_active_quizzes(session))
+        async with async_session_factory() as session:
+            total_users = (await session.execute(select(func.count(User.id)))).scalar()
         text = (
             "📊 <b>Bot Statistics</b>\n\n"
             f"👥 Total Users: {total_users}\n"
-            f"📝 Active Quizzes: {total_quizzes}\n"
             f"🕐 Updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
         )
         await callback.message.edit_text(text, reply_markup=back_kb("admin"))
@@ -67,39 +97,22 @@ async def admin_callback(callback: CallbackQuery, user=None, session=None) -> No
             reply_markup=back_kb("admin")
         )
 
-    elif action == "quizzes":
-        quizzes = await QuizCRUD.get_active_quizzes(session)
-        text = "📝 <b>Manage Quizzes</b>\n\n"
-        if quizzes:
-            for i, q in enumerate(quizzes[:10], 1):
-                text += f"{i}. {q.title} ({q.topic}) — {q.question_count} Qs\n"
-        else:
-            text += "No quizzes available."
-        await callback.message.edit_text(text, reply_markup=back_kb("admin"))
-
-    elif action == "dpps":
+    else:
         await callback.message.edit_text(
-            "📚 <b>Manage DPPs</b>\n\nFeature coming soon...",
-            reply_markup=back_kb("admin")
-        )
-
-    elif action == "subs":
-        await callback.message.edit_text(
-            "⭐ <b>Manage Subscriptions</b>\n\nFeature coming soon...",
-            reply_markup=back_kb("admin")
+            "Coming soon...", reply_markup=back_kb("admin")
         )
 
     await callback.answer()
 
+# ========== BROADCAST (simplified) ==========
 
 @admin_router.message(Command("cancel"), StateFilter(AdminStates))
 async def cancel_admin(message: Message, state: FSMContext) -> None:
     await state.clear()
     await message.answer("Cancelled.", reply_markup=admin_menu_kb())
 
-
 @admin_router.message(StateFilter(AdminStates.broadcast_text))
-async def broadcast_message(message: Message, state: FSMContext, session=None) -> None:
+async def broadcast_message(message: Message, state: FSMContext) -> None:
     if not check_admin(message.from_user.id):
         return
     text = message.html_text or message.text
@@ -111,9 +124,8 @@ async def broadcast_message(message: Message, state: FSMContext, session=None) -
     )
     await state.set_state(AdminStates.broadcast_confirm)
 
-
 @admin_router.callback_query(F.data == "admin_broadcast_confirm", StateFilter(AdminStates))
-async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, session=None) -> None:
+async def confirm_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
     if not check_admin(callback.from_user.id):
         await callback.answer("⛔ Unauthorized", show_alert=True)
         return
@@ -122,16 +134,16 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, session=
     broadcast_text = data.get("broadcast_text", "")
     await callback.message.edit_text("📤 Broadcasting... This may take a while.")
 
-    users = await UserCRUD.get_all_users(session)
-    sent = 0
-    failed = 0
-
-    for u in users[:100]:
-        try:
-            await callback.bot.send_message(u.id, broadcast_text)
-            sent += 1
-        except Exception as e:
-            failed += 1
+    async with async_session_factory() as session:
+        users = (await session.execute(select(User))).scalars().all()
+        sent = 0
+        failed = 0
+        for u in users[:100]:   # pehle 100 users
+            try:
+                await callback.bot.send_message(u.telegram_id, broadcast_text)
+                sent += 1
+            except Exception as e:
+                failed += 1
 
     await callback.message.edit_text(
         f"📢 <b>Broadcast Complete</b>\n\n"
@@ -142,4 +154,3 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext, session=
     )
     await state.clear()
     await callback.answer()
-    
