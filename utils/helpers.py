@@ -9,22 +9,21 @@ from cryptography.fernet import Fernet
 from config import settings
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from aiogram.types import Message
+from aiogram.fsm.context import FSMContext
+from states.quiz_states import PhotoTestStates
 
-# ─────────── पुराने helper (पहले से) ───────────
+# ─────────── पुराने helper ───────────
 def sanitize_text(text: str) -> str:
-    """Remove HTML/Telegram unsafe characters"""
     text = text.replace("<", "&lt;").replace(">", "&gt;")
     text = re.sub(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]', '', text)
     return text.strip()
 
 def truncate_text(text: str, max_length: int = 4096) -> str:
-    """Truncate text to Telegram's message limit"""
     if len(text) <= max_length:
         return text
     return text[:max_length-3] + "..."
 
 def parse_quiz_answer(text: str) -> Optional[str]:
-    """Parse user's answer text to option letter (A/B/C/D)"""
     text = text.strip().upper()
     if text in ("A", "B", "C", "D"):
         return text
@@ -38,7 +37,6 @@ def parse_quiz_answer(text: str) -> Optional[str]:
     return None
 
 def encrypt_data(data: str) -> Optional[str]:
-    """Encrypt sensitive data if encryption key is set"""
     if not settings.ENCRYPTION_KEY:
         return data
     try:
@@ -52,7 +50,6 @@ def encrypt_data(data: str) -> Optional[str]:
         return data
 
 def decrypt_data(token: str) -> Optional[str]:
-    """Decrypt data if encryption key is set"""
     if not settings.ENCRYPTION_KEY:
         return token
     try:
@@ -66,7 +63,6 @@ def decrypt_data(token: str) -> Optional[str]:
         return None
 
 def format_time(seconds: int) -> str:
-    """Format seconds to readable time string"""
     hours = seconds // 3600
     minutes = (seconds % 3600) // 60
     secs = seconds % 60
@@ -77,23 +73,19 @@ def format_time(seconds: int) -> str:
     return f"{secs}s"
 
 def calculate_percentage(correct: int, total: int) -> float:
-    """Calculate percentage score"""
     if total <= 0:
         return 0.0
     return round((correct / total) * 100, 2)
 
 def chunk_list(items: list, chunk_size: int = 10) -> list[list]:
-    """Split list into chunks"""
     return [items[i:i+chunk_size] for i in range(0, len(items), chunk_size)]
 
 # ─────────── नए helper (photo/pdf test के लिए) ───────────
 def image_to_data_url(img_bytes: bytes, ext: str = "jpeg") -> str:
-    """bytes को base64 data URL में बदलें"""
     b64 = base64.b64encode(img_bytes).decode("utf-8")
     return f"data:image/{ext};base64,{b64}"
 
 def clean_json(text: str) -> str:
-    """AI के जवाब से JSON निकालें"""
     if "```json" in text:
         text = text.split("```json")[1].split("```")[0]
     elif "```" in text:
@@ -101,7 +93,6 @@ def clean_json(text: str) -> str:
     return text.strip()
 
 def build_options_keyboard(current_q: dict):
-    """एक प्रश्न के लिए A/B/C/D + End Test बटन बनाएँ"""
     builder = InlineKeyboardBuilder()
     for i, opt in enumerate(current_q["options"]):
         label = f"{chr(65+i)}. {opt}"
@@ -111,12 +102,10 @@ def build_options_keyboard(current_q: dict):
     return builder.as_markup()
 
 async def show_dashboard(message: Message, answers: list):
-    """फोटो/PDF टेस्ट का डैशबोर्ड दिखाएँ"""
     total = len(answers)
     correct = sum(1 for a in answers if a["is_correct"])
     wrong = total - correct
     percentage = round((correct / total) * 100, 1) if total > 0 else 0
-
     text = (
         "📊 <b>Photo/PDF Test Dashboard</b>\n\n"
         f"✅ सही: {correct}\n"
@@ -125,7 +114,6 @@ async def show_dashboard(message: Message, answers: list):
         f"📝 कुल प्रश्न: {total}\n\n"
         "<b>प्रत्येक प्रश्न का उत्तर:</b>\n"
     )
-
     for i, ans in enumerate(answers, 1):
         status = "✅" if ans["is_correct"] else "❌"
         selected_opt = ans["options"][ans["selected"]]
@@ -136,5 +124,21 @@ async def show_dashboard(message: Message, answers: list):
             f"   सही: {correct_opt}\n"
             f"   व्याख्या: {ans['explanation']}\n\n"
         )
-
     await message.answer(text)
+
+# ─────────── Shared Test Session Starter ───────────
+async def start_shared_test_sessions(user_id: int, message: Message, state: FSMContext, questions: list):
+    """किसी भी यूज़र के लिए शेयर्ड टेस्ट सेशन शुरू करें।"""
+    await state.clear()
+    await state.update_data(
+        questions=questions,
+        current_index=0,
+        answers=[],
+        total_questions=len(questions)
+    )
+    first_q = questions[0]
+    await message.answer(
+        f"📝 प्रश्न 1/{len(questions)}:\n\n{first_q['question']}",
+        reply_markup=build_options_keyboard(first_q)
+    )
+    await state.set_state(PhotoTestStates.answering)
