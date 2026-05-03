@@ -56,7 +56,7 @@ class Settings(BaseSettings):
     SUBSCRIPTION_CHECK_INTERVAL: int = Field(3600, ge=300, le=86400)
 
     model_config = {
-        "env_file": ".env",
+        "env_file": ".env" if Path(".env").exists() else None,
         "env_file_encoding": "utf-8",
         "case_sensitive": True,
         "extra": "ignore",
@@ -68,20 +68,12 @@ class Settings(BaseSettings):
     @field_validator("ADMIN_IDS", mode="before")
     @classmethod
     def parse_admin_ids(cls, v):
-        """
-        Railway / .env se aane wale formats handle karta hai:
-          - "123456789"            → [123456789]
-          - "123456789,987654321"  → [123456789, 987654321]
-          - "[123456789]"          → [123456789]   (brackets strip ho jayenge)
-          - []  ya None            → []
-        """
         if not v:
             return []
         if isinstance(v, (list, tuple)):
             return [int(x) for x in v if str(x).strip().lstrip("-").isdigit()]
         if isinstance(v, str):
-            # brackets aur spaces strip karo
-            v = v.strip().strip("[]")
+            v = v.strip().strip("[]").replace('"', '').replace("'", "")
             return [
                 int(x.strip())
                 for x in v.split(",")
@@ -131,6 +123,11 @@ class Settings(BaseSettings):
     @property
     def webhook_secret_value(self) -> str | None:
         return self.WEBHOOK_SECRET.get_secret_value() if self.WEBHOOK_SECRET else None
+
+    @property
+    def is_webhook_mode(self) -> bool:
+        """app.py mein use hota hai — webhook on/off check karne ke liye."""
+        return self.USE_WEBHOOK and bool(self.WEBHOOK_URL)
 
 
 # ── Load Settings ─────────────────────────────────────────────────────────────
