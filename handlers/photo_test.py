@@ -1,5 +1,4 @@
-import io
-import json
+import io, json
 from datetime import datetime
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
@@ -59,7 +58,7 @@ async def handle_photo(message: Message, state: FSMContext) -> None:
 
 @photo_test_router.callback_query(F.data.startswith("photo_answer:"), PhotoTestStates.answering)
 async def process_answer(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
+    await callback.answer()  # <-- तुरंत acknowledge
     data = await state.get_data()
     questions = data["questions"]
     current_idx = data["current_index"]
