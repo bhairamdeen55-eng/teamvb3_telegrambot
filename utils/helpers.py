@@ -2,11 +2,15 @@
 import re
 import json
 import hashlib
+import base64
 from datetime import datetime
-from typing import Optional, Any
+from typing import Optional, Any, Union
 from cryptography.fernet import Fernet
 from config import settings
+from aiogram.utils.keyboard import InlineKeyboardBuilder
+from aiogram.types import Message
 
+# ─────────── पुराने helper (पहले से) ───────────
 def sanitize_text(text: str) -> str:
     """Remove HTML/Telegram unsafe characters"""
     text = text.replace("<", "&lt;").replace(">", "&gt;")
@@ -82,4 +86,55 @@ def chunk_list(items: list, chunk_size: int = 10) -> list[list]:
     """Split list into chunks"""
     return [items[i:i+chunk_size] for i in range(0, len(items), chunk_size)]
 
-import base64
+# ─────────── नए helper (photo/pdf test के लिए) ───────────
+def image_to_data_url(img_bytes: bytes, ext: str = "jpeg") -> str:
+    """bytes को base64 data URL में बदलें"""
+    b64 = base64.b64encode(img_bytes).decode("utf-8")
+    return f"data:image/{ext};base64,{b64}"
+
+def clean_json(text: str) -> str:
+    """AI के जवाब से JSON निकालें"""
+    if "```json" in text:
+        text = text.split("```json")[1].split("```")[0]
+    elif "```" in text:
+        text = text.split("```")[1].split("```")[0]
+    return text.strip()
+
+def build_options_keyboard(current_q: dict):
+    """एक प्रश्न के लिए A/B/C/D + End Test बटन बनाएँ"""
+    builder = InlineKeyboardBuilder()
+    for i, opt in enumerate(current_q["options"]):
+        label = f"{chr(65+i)}. {opt}"
+        builder.button(text=label, callback_data=f"photo_answer:{i}")
+    builder.button(text="⏹ End Test", callback_data="photo_end_test")
+    builder.adjust(1)
+    return builder.as_markup()
+
+async def show_dashboard(message: Message, answers: list):
+    """फोटो/PDF टेस्ट का डैशबोर्ड दिखाएँ"""
+    total = len(answers)
+    correct = sum(1 for a in answers if a["is_correct"])
+    wrong = total - correct
+    percentage = round((correct / total) * 100, 1) if total > 0 else 0
+
+    text = (
+        "📊 <b>Photo/PDF Test Dashboard</b>\n\n"
+        f"✅ सही: {correct}\n"
+        f"❌ गलत: {wrong}\n"
+        f"📈 सटीकता: {percentage}%\n"
+        f"📝 कुल प्रश्न: {total}\n\n"
+        "<b>प्रत्येक प्रश्न का उत्तर:</b>\n"
+    )
+
+    for i, ans in enumerate(answers, 1):
+        status = "✅" if ans["is_correct"] else "❌"
+        selected_opt = ans["options"][ans["selected"]]
+        correct_opt = ans["options"][ans["correct"]]
+        text += (
+            f"{status} Q{i}: {ans['question']}\n"
+            f"   आपका: {selected_opt}\n"
+            f"   सही: {correct_opt}\n"
+            f"   व्याख्या: {ans['explanation']}\n\n"
+        )
+
+    await message.answer(text)
