@@ -11,38 +11,16 @@ from config import settings
 from db.database import async_session_factory
 from db.models import User
 from sqlalchemy import select, func
+from utils.keyboards import admin_menu_kb, back_kb, yes_no_kb
 
 admin_router = Router()
 
-# ========== TEMPORARY STATES (बाद में states/admin_states.py में शिफ्ट करें) ==========
+# ========== ADMIN STATES ==========
 class AdminStates(StatesGroup):
     broadcast_text = State()
     broadcast_confirm = State()
 
-# ========== HELPER KEYBOARDS (स्टब्स – बाद में utils/keyboards.py में ऐड करें) ==========
-def admin_menu_kb():
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.button(text="📊 Stats", callback_data="admin_stats")
-    builder.button(text="📢 Broadcast", callback_data="admin_broadcast")
-    builder.adjust(1)
-    return builder.as_markup()
-
-def back_kb(return_to: str = "admin"):
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.button(text="🔙 Back", callback_data=f"admin_{return_to}")
-    return builder.as_markup()
-
-def yes_no_kb(confirm_callback: str, cancel_callback_data: str = "admin"):
-    from aiogram.utils.keyboard import InlineKeyboardBuilder
-    builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Yes", callback_data=confirm_callback)
-    builder.button(text="❌ No", callback_data=f"admin_{cancel_callback_data}")
-    return builder.as_markup()
-
 # ========== ADMIN CHECK ==========
-
 def check_admin(user_id: int) -> bool:
     """config के ADMIN_IDS में है तो admin"""
     return user_id in settings.ADMIN_IDS
@@ -104,7 +82,7 @@ async def admin_callback(callback: CallbackQuery) -> None:
 
     await callback.answer()
 
-# ========== BROADCAST (simplified) ==========
+# ========== BROADCAST ==========
 
 @admin_router.message(Command("cancel"), StateFilter(AdminStates))
 async def cancel_admin(message: Message, state: FSMContext) -> None:
@@ -138,7 +116,7 @@ async def confirm_broadcast(callback: CallbackQuery, state: FSMContext) -> None:
         users = (await session.execute(select(User))).scalars().all()
         sent = 0
         failed = 0
-        for u in users[:100]:   # pehle 100 users
+        for u in users:   # सभी यूज़र्स को भेजें (पहले 100 तक सीमित था, अब पूरे)
             try:
                 await callback.bot.send_message(u.telegram_id, broadcast_text)
                 sent += 1
