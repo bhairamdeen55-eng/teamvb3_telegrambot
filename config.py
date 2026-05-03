@@ -37,6 +37,10 @@ class Settings(BaseSettings):
     WEBHOOK_PORT: int = Field(8443, ge=1024, le=65535)
     WEBHOOK_SECRET: Optional[SecretStr] = None
 
+    # ── Railway auto-set ─────────────────────────────────────
+    RAILWAY_PUBLIC_DOMAIN: Optional[str] = Field(None, validation_alias="RAILWAY_PUBLIC_DOMAIN")
+    RAILWAY_SERVICE_NAME: Optional[str] = Field(None, validation_alias="RAILWAY_SERVICE_NAME")
+
     # ── Security (optional) ───────────────────────────────────
     ENCRYPTION_KEY: Optional[str] = None
     JWT_SECRET: Optional[str] = None
@@ -126,7 +130,11 @@ class Settings(BaseSettings):
 
     @property
     def is_webhook_mode(self) -> bool:
-        """app.py mein use hota hai — webhook on/off check karne ke liye."""
+        """Railway ya manual webhook setting ke hisaab se mode decide karo."""
+        # Agar Railway ne domain diya hai to auto webhook mode ON
+        if self.RAILWAY_PUBLIC_DOMAIN:
+            return True
+        # Manual webhook setting
         return self.USE_WEBHOOK and bool(self.WEBHOOK_URL)
 
 
@@ -137,4 +145,3 @@ except Exception as e:
     import sys
     print(f"❌ Configuration Error: {e}")
     sys.exit(1)
-    
