@@ -72,3 +72,32 @@ def admin_menu_kb() -> InlineKeyboardMarkup:
 
 def remove_kb() -> ReplyKeyboardRemove:
     return ReplyKeyboardRemove()
+
+# ──────────────── NEW: Daily Tests & Subject Selection ────────────────
+
+def daily_tests_keyboard(tests) -> InlineKeyboardMarkup:
+    """रोज़ के 5 टेस्ट दिखाने के लिए inline keyboard (हर टेस्ट का बटन)"""
+    builder = InlineKeyboardBuilder()
+    for idx, test in enumerate(tests, 1):
+        # माना कि test object में id और type है
+        builder.button(text=f"📝 Test {idx}", callback_data=f"start_test:{test.id}")
+    builder.button(text="🔙 Back", callback_data="menu")
+    builder.adjust(1)
+    return builder.as_markup()
+
+def subject_selection_keyboard() -> InlineKeyboardMarkup:
+    """विषय चुनने के लिए keyboard"""
+    builder = InlineKeyboardBuilder()
+    subjects = [
+        ("📐 Mathematics", "subject:math"),
+        ("⚛️ Physics", "subject:physics"),
+        ("🧪 Chemistry", "subject:chemistry"),
+        ("🧬 Biology", "subject:biology"),
+        ("💻 Computer Science", "subject:cs"),
+        ("🎲 Random", "subject:random"),
+    ]
+    for text, callback in subjects:
+        builder.button(text=text, callback_data=callback)
+    builder.button(text="🔙 Back", callback_data="menu")
+    builder.adjust(2, 2, 2, 1)
+    return builder.as_markup()
