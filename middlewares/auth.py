@@ -1,58 +1,68 @@
 # middlewares/auth.py
-import logging
-from typing import Any, Awaitable, Callable, Dict
-
+from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
 from aiogram.types import TelegramObject, Message, CallbackQuery
-
-from db.database import AsyncSessionLocal
-from db.crud import get_or_create_user
-
-logger = logging.getLogger(__name__)
+from loguru import logger
+from db.database import async_session_factory
+from db.crud import UserCRUD
 
 
 class AuthMiddleware(BaseMiddleware):
-    """Har update pe user DB mein register karo aur ban check karo."""
-
     async def __call__(
         self,
         handler: Callable[[TelegramObject, Dict[str, Any]], Awaitable[Any]],
         event: TelegramObject,
         data: Dict[str, Any],
     ) -> Any:
-        # User object lo
-        tg_user = data.get("event_from_user")
-        if not tg_user:
+        user_id = None
+        username = None
+        first_name = None
+        last_name = None
+
+        if isinstance(event, Message) and event.from_user:
+            user_id = event.from_user.id
+            username = event.from_user.username
+            first_name = event.from_user.first_name
+            last_name = event.from_user.last_name
+            data["event_type"] = "message"
+        elif isinstance(event, CallbackQuery) and event.from_user:
+            user_id = event.from_user.id
+            username = event.from_user.username
+            first_name = event.from_user.first_name
+            last_name = event.from_user.last_name
+            data["event_type"] = "callback"
+
+        if not user_id:
             return await handler(event, data)
 
-        try:
-            async with AsyncSessionLocal() as session:
-                # User get ya create karo
-                user = await get_or_create_user(
-                    session=session,
-                    telegram_id=tg_user.id,
-                    full_name=tg_user.full_name,
-                    username=tg_user.username,
+        # ✅ async with use karo — session poore handler lifecycle mein open rahega
+        async with async_session_factory() as session:
+            try:
+                user = await UserCRUD.get_or_create(
+                    session,
+                    user_id=user_id,
+                    username=username,
+                    first_name=first_name,
+                    last_name=last_name,
                 )
 
-                # Ban check
-                if user.is_banned:
+                if user.is_blocked:
                     if isinstance(event, Message):
-                        await event.answer("🚫 Tumhara account ban kar diya gaya hai.")
+                        await event.answer("⛔ Your account has been blocked. Contact admin.")
                     elif isinstance(event, CallbackQuery):
-                        await event.answer("🚫 Account banned!", show_alert=True)
+                        await event.answer("⛔ Account blocked", show_alert=True)
                     return
 
-                # Session aur user data inject karo
+                data["user"] = user
                 data["db_user"] = user
                 data["session"] = session
 
                 return await handler(event, data)
 
-        except Exception as e:
-            logger.error(f"AuthMiddleware error for user {tg_user.id}: {e}")
-            # Session error pe bhi handler chalne do — graceful degradation
-            data["db_user"] = None
-            data["session"] = None
-            return await handler(event, data)
-            
+            except Exception as e:
+                logger.error(f"AuthMiddleware error for user {user_id}: {e}", exc_info=True)
+                data["user"] = None
+                data["db_user"] = None
+                data["session"] = None
+                return await handler(event, data)
+                
