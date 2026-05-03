@@ -1,4 +1,3 @@
-# app.py
 import asyncio
 import sys
 from typing import Callable, Dict, Any, Awaitable
@@ -18,15 +17,13 @@ from handlers.menu import menu_router
 from handlers.quiz import quiz_router
 from handlers.dpp import dpp_router
 from handlers.photo_test import photo_test_router
-from handlers.pdf_test import pdf_test_router          # ✅ नया PDF राउटर
+from handlers.pdf_test import pdf_test_router
 from handlers.callbacks import callback_router
 from handlers.admin import admin_router
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.auth import AuthMiddleware
 from services.test_service import send_daily_tests
 
-
-# ========== SUBSCRIPTION MIDDLEWARE ==========
 
 class SubscriptionMiddleware(BaseMiddleware):
     def __init__(self):
@@ -64,37 +61,20 @@ class SubscriptionMiddleware(BaseMiddleware):
         if not_joined:
             text = "❌ *Bot Use Karne Ke Liye Join Karein*\n\n"
             text += "Aapne niche diye gaye channel aur group join nahi kiye hai:\n\n"
-
             keyboard_buttons = []
             for chat_id, chat_type, chat_url in not_joined:
                 text += f"➡️ {chat_type}: {chat_id}\n"
-                keyboard_buttons.append([
-                    InlineKeyboardButton(text=f"Join {chat_type}", url=chat_url)
-                ])
-
+                keyboard_buttons.append([InlineKeyboardButton(text=f"Join {chat_type}", url=chat_url)])
             text += "\n✅ Dono join karne ke baad neeche *'Check Karao'* button dabayein!"
-            keyboard_buttons.append([
-                InlineKeyboardButton(text="✅ Check Karao", callback_data="check_subscription")
-            ])
-
+            keyboard_buttons.append([InlineKeyboardButton(text="✅ Check Karao", callback_data="check_subscription")])
             keyboard = InlineKeyboardMarkup(inline_keyboard=keyboard_buttons)
-
             try:
-                await bot_instance.send_message(
-                    chat_id=user.id,
-                    text=text,
-                    reply_markup=keyboard,
-                    parse_mode="Markdown"
-                )
+                await bot_instance.send_message(chat_id=user.id, text=text, reply_markup=keyboard, parse_mode="Markdown")
             except Exception as e:
                 logger.error(f"Could not send subscription message to {user.id}: {e}")
-
             return
-
         return await handler(event, data)
 
-
-# ========== DAILY TEST SCHEDULER ==========
 
 @aiocron.crontab("0 8 * * *")
 async def daily_test_job():
@@ -105,8 +85,6 @@ async def daily_test_job():
     except Exception as e:
         logger.error(f"Error in daily test job: {e}")
 
-
-# ========== COMMANDS & STARTUP ==========
 
 async def set_commands() -> None:
     commands = [
@@ -125,7 +103,6 @@ async def on_startup() -> None:
     logger.info("Starting bot...")
     await init_db()
     await set_commands()
-
     if settings.SENTRY_DSN:
         import sentry_sdk
         sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
@@ -146,32 +123,23 @@ def register_routers() -> None:
     dp.include_router(quiz_router)
     dp.include_router(dpp_router)
     dp.include_router(photo_test_router)
-    dp.include_router(pdf_test_router)      # ✅ PDF राउटर जोड़ा गया
+    dp.include_router(pdf_test_router)
     dp.include_router(admin_router)
     logger.info("All routers registered")
 
 def register_middlewares() -> None:
-    # सिर्फ message पर लगाएँ — callback पर नहीं (तेज़ रेस्पॉन्स के लिए)
     dp.message.middleware(AuthMiddleware())
     dp.message.middleware(SubscriptionMiddleware())
-    dp.message.middleware(ThrottlingMiddleware(
-        rate=settings.THROTTLE_RATE,
-        burst=settings.THROTTLE_BURST
-    ))
+    dp.message.middleware(ThrottlingMiddleware(rate=settings.THROTTLE_RATE, burst=settings.THROTTLE_BURST))
     logger.info("Middlewares registered: Auth, Subscription, Throttling (message only)")
 
-
-# ========== MAIN ==========
 
 async def main_polling() -> None:
     register_middlewares()
     register_routers()
     await on_startup()
     try:
-        await dp.start_polling(
-            bot,
-            allowed_updates=dp.resolve_used_update_types()
-        )
+        await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     except (KeyboardInterrupt, SystemExit):
         pass
     finally:
@@ -187,11 +155,7 @@ async def main_webhook() -> None:
         webhook_url = f"https://{settings.RAILWAY_PUBLIC_DOMAIN}/webhook"
 
     if webhook_url:
-        await bot.set_webhook(
-            url=webhook_url,
-            secret_token=settings.webhook_secret_value,
-            drop_pending_updates=True
-        )
+        await bot.set_webhook(url=webhook_url, secret_token=settings.webhook_secret_value, drop_pending_updates=True)
         logger.info("Webhook set to {}", webhook_url)
     else:
         logger.warning("No webhook URL configured – bot won't receive updates in webhook mode!")
@@ -200,7 +164,6 @@ async def main_webhook() -> None:
     webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     webhook_requests_handler.register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
-
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", settings.WEBHOOK_PORT)
