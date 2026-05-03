@@ -1,4 +1,5 @@
 # db/models.py
+import secrets
 from datetime import datetime, timedelta
 from sqlalchemy import Column, Integer, BigInteger, String, Boolean, DateTime, Float, Text, Enum, ForeignKey, JSON
 from sqlalchemy.orm import relationship
@@ -144,3 +145,18 @@ class PhotoTest(Base):
     feedback = Column(Text, nullable=True)
     processed = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+# ========== NEW: SharedTest ==========
+class SharedTest(Base):
+    __tablename__ = "shared_tests"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    code = Column(String(32), unique=True, index=True, nullable=False)
+    questions = Column(JSON, nullable=False)
+    created_by = Column(BigInteger, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=False)
+
+    @staticmethod
+    def generate_code():
+        return secrets.token_hex(8)
