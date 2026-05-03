@@ -1,12 +1,19 @@
-import io, json
+# handlers/pdf_test.py
+import io
+import json
+from datetime import datetime, timedelta
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from loguru import logger
 import fitz
 from services.ai_service import ai_service
 from states.quiz_states import PhotoTestStates
-from utils.helpers import image_to_data_url, clean_json, build_options_keyboard, show_dashboard
+from utils.helpers import image_to_data_url, clean_json, build_options_keyboard, show_dashboard, start_shared_test_sessions
+from db.database import async_session_factory
+from db.models import SharedTest
+from sqlalchemy import select
+from config import settings
 
 pdf_test_router = Router()
 
@@ -54,62 +61,60 @@ async def handle_pdf(message: Message, state: FSMContext) -> None:
         if not isinstance(questions, list) or len(questions) == 0:
             raise ValueError("AI ने मान्य प्रश्न नहीं लौटाए")
 
-        await state.update_data(
-            questions=questions,
-            current_index=0,
-            answers=[],
-            total_questions=len(questions)
-        )
-        first_q = questions[0]
+        code = SharedTest.generate_code()
+        expires = datetime.utcnow() + timedelta(hours=48)
+
+        async with async_session_factory() as session:
+            shared = SharedTest(
+                code=code,
+                questions=questions,
+                created_by=message.from_user.id,
+                expires_at=expires
+            )
+            session.add(shared)
+            await session.commit()
+
+        bot_username = (await message.bot.me()).username
+        deep_link = f"https://t.me/{bot_username}?start=test_{code}"
+
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🚀 इस टेस्ट को खुद खेलें", callback_data=f"start_shared_test:{code}")],
+            [InlineKeyboardButton(text="📋 लिंक कॉपी करें (टैप करें)", url=deep_link)]
+        ])
+
         await status_msg.edit_text(
-            f"📝 प्रश्न 1/{len(questions)}:\n\n{first_q['question']}",
-            reply_markup=build_options_keyboard(first_q)
+            f"✅ <b>लाइव टेस्ट तैयार!</b>\n\n"
+            f"⏰ यह लिंक 48 घंटे तक valid रहेगा।\n"
+            f"🔗 नीचे बटन से आप खुद भी टेस्ट दे सकते हैं।",
+            reply_markup=keyboard
         )
-        await state.set_state(PhotoTestStates.answering)
+        await state.clear()
 
     except Exception as e:
         logger.error(f"PDF test error: {e}")
         await status_msg.edit_text("❌ PDF को प्रोसेस करने में त्रुटि। कृपया स्पष्ट PDF भेजें या बाद में प्रयास करें।")
         await state.clear()
 
-@pdf_test_router.callback_query(F.data.startswith("photo_answer:"), PhotoTestStates.answering)
-async def process_answer(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()  # <-- तुरंत acknowledge
-    data = await state.get_data()
-    questions = data["questions"]
-    current_idx = data["current_index"]
-    answers = data.get("answers", [])
-
-    selected_idx = int(callback.data.split(":")[1])
-    correct_idx = questions[current_idx]["correct_answer"]
-    is_correct = (selected_idx == correct_idx)
-
-    answers.append({
-        "question": questions[current_idx]["question"],
-        "selected": selected_idx,
-        "correct": correct_idx,
-        "is_correct": is_correct,
-        "options": questions[current_idx]["options"],
-        "explanation": questions[current_idx].get("explanation", "")
-    })
-
-    current_idx += 1
-    await state.update_data(current_index=current_idx, answers=answers)
-
-    if current_idx >= len(questions):
-        await show_dashboard(callback.message, answers)
-        await state.clear()
-    else:
-        next_q = questions[current_idx]
-        await callback.message.edit_text(
-            f"📝 प्रश्न {current_idx+1}/{len(questions)}:\n\n{next_q['question']}",
-            reply_markup=build_options_keyboard(next_q)
-        )
-
-@pdf_test_router.callback_query(F.data == "photo_end_test", PhotoTestStates.answering)
-async def end_test(callback: CallbackQuery, state: FSMContext):
+@pdf_test_router.callback_query(F.data.startswith("start_shared_test:"))
+async def start_shared_test_callback(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
-    data = await state.get_data()
-    answers = data.get("answers", [])
-    await show_dashboard(callback.message, answers)
-    await state.clear()
+    code = callback.data.split(":", 1)[1]
+
+    async with async_session_factory() as session:
+        result = await session.execute(select(SharedTest).where(SharedTest.code == code))
+        shared_test = result.scalar_one_or_none()
+
+        if not shared_test:
+            await callback.message.answer("❌ टेस्ट नहीं मिला।")
+            return
+
+        if shared_test.expires_at < datetime.utcnow():
+            await callback.message.answer("⏰ यह टेस्ट expired हो गया है।")
+            return
+
+        await start_shared_test_sessions(
+            user_id=callback.from_user.id,
+            message=callback.message,
+            state=state,
+            questions=shared_test.questions
+        )
