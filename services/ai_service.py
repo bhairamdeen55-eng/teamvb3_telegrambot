@@ -1,4 +1,3 @@
-# services/ai_service.py
 import json
 from typing import Optional, List
 from openai import AsyncOpenAI
