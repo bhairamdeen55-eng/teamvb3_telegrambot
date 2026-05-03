@@ -29,13 +29,21 @@ class AIService:
             content = [{"type": "text", "text": prompt}]
             for url in image_urls:
                 content.append({"type": "image_url", "image_url": {"url": url}})
-            
+
             response = await self.client.chat.completions.create(
                 model=settings.AI_MODEL,
                 messages=[{"role": "user", "content": content}],
                 max_tokens=settings.AI_MAX_TOKENS,
             )
-            return response.choices[0].message.content
+            if response and response.choices and len(response.choices) > 0:
+                result = response.choices[0].message.content
+                if result:
+                    return result
+                else:
+                    logger.error("AI returned empty content")
+            else:
+                logger.error("AI returned no choices")
+            return None
         except Exception as e:
             logger.error(f"PDF analysis failed: {e}")
             return None
@@ -59,7 +67,15 @@ class AIService:
                 }],
                 max_tokens=settings.AI_MAX_TOKENS,
             )
-            return response.choices[0].message.content
+            if response and response.choices and len(response.choices) > 0:
+                result = response.choices[0].message.content
+                if result:
+                    return result
+                else:
+                    logger.error("AI returned empty content for image")
+            else:
+                logger.error("AI returned no choices for image")
+            return None
         except Exception as e:
             logger.error(f"Image analysis failed: {e}")
             return None
