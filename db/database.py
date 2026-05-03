@@ -42,6 +42,9 @@ AsyncSessionLocal = async_sessionmaker(
 )
 
 
+# Alias — __init__.py aur baaki files ke saath compatible
+async_session_factory = AsyncSessionLocal
+
 # ── Base Model ────────────────────────────────────────────────
 class Base(DeclarativeBase):
     pass
