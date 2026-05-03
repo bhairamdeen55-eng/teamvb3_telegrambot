@@ -1,7 +1,7 @@
 # middlewares/auth.py
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import TelegramObject, Message, CallbackQuery
 from loguru import logger
 from db.database import async_session_factory
 from db.crud import UserCRUD
@@ -32,11 +32,12 @@ class AuthMiddleware(BaseMiddleware):
             last_name = event.from_user.last_name
             data["event_type"] = "callback"
 
-        if user_id and async_session_factory:
-            # ✅ FIX: session manually open — handler ke baad close hoga
-            session = async_session_factory()
+        if not user_id:
+            return await handler(event, data)
+
+        # ✅ async with use karo — session poore handler lifecycle mein open rahega
+        async with async_session_factory() as session:
             try:
-                # ✅ FIX: UserCRUD.get_or_create use karo — crud.py ke saath match
                 user = await UserCRUD.get_or_create(
                     session,
                     user_id=user_id,
@@ -64,10 +65,4 @@ class AuthMiddleware(BaseMiddleware):
                 data["db_user"] = None
                 data["session"] = None
                 return await handler(event, data)
-
-            finally:
-                # ✅ Handler complete hone ke BAAD close
-                await session.close()
-
-        return await handler(event, data)
-        
+                
