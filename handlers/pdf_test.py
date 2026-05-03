@@ -1,10 +1,9 @@
-import io
-import json
+import io, json
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from loguru import logger
-import fitz  # PyMuPDF
+import fitz
 from services.ai_service import ai_service
 from states.quiz_states import PhotoTestStates
 from utils.helpers import image_to_data_url, clean_json, build_options_keyboard, show_dashboard
@@ -75,7 +74,7 @@ async def handle_pdf(message: Message, state: FSMContext) -> None:
 
 @pdf_test_router.callback_query(F.data.startswith("photo_answer:"), PhotoTestStates.answering)
 async def process_answer(callback: CallbackQuery, state: FSMContext):
-    await callback.answer()
+    await callback.answer()  # <-- तुरंत acknowledge
     data = await state.get_data()
     questions = data["questions"]
     current_idx = data["current_index"]
