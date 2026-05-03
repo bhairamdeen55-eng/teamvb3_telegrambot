@@ -1,3 +1,4 @@
+# app.py
 import asyncio
 import sys
 from typing import Callable, Dict, Any, Awaitable
@@ -27,7 +28,6 @@ from services.test_service import send_daily_tests
 # ========== SUBSCRIPTION MIDDLEWARE ==========
 
 class SubscriptionMiddleware(BaseMiddleware):
-    # Channel/Group IDs config se le rahe hain, nahi to default
     def __init__(self):
         channel_id = getattr(settings, 'CHANNEL_ID', None) or "@theteamvb"
         group_id = getattr(settings, 'GROUP_ID', None) or "@teamvb2"
@@ -48,11 +48,9 @@ class SubscriptionMiddleware(BaseMiddleware):
 
         bot_instance = data["bot"]
 
-        # Subscription check callback block mat karo
         if hasattr(event, "data") and event.data == "check_subscription":
             return await handler(event, data)
 
-        # Saare required chats check karo
         not_joined = []
         for chat_id, chat_type, chat_url in self.REQUIRED_CHATS:
             try:
@@ -90,16 +88,15 @@ class SubscriptionMiddleware(BaseMiddleware):
             except Exception as e:
                 logger.error(f"Could not send subscription message to {user.id}: {e}")
 
-            return  # Handler block karo
+            return
 
         return await handler(event, data)
 
 
-# ========== DAILY TEST SCHEDULER (app.py ke andar hi) ==========
+# ========== DAILY TEST SCHEDULER ==========
 
-@aiocron.crontab("0 8 * * *")  # Har din subah 8:00 UTC (Indian time 1:30 PM)
+@aiocron.crontab("0 8 * * *")
 async def daily_test_job():
-    """Sabhi active users ko 5 daily tests bhejein."""
     try:
         logger.info("Running daily test job...")
         await send_daily_tests(bot)
@@ -144,7 +141,7 @@ async def on_shutdown() -> None:
 def register_routers() -> None:
     dp.include_router(start_router)
     dp.include_router(menu_router)
-    dp.include_router(callback_router)
+    dp.include_router(callback_router)      # ← यहीं से बटन जीवित होते हैं
     dp.include_router(quiz_router)
     dp.include_router(dpp_router)
     dp.include_router(photo_test_router)
@@ -182,7 +179,6 @@ async def main_webhook() -> None:
     register_routers()
     await on_startup()
 
-    # Webhook URL determine karo (Railway ya manual)
     webhook_url = settings.WEBHOOK_URL
     if not webhook_url and getattr(settings, 'RAILWAY_PUBLIC_DOMAIN', None):
         webhook_url = f"https://{settings.RAILWAY_PUBLIC_DOMAIN}/webhook"
