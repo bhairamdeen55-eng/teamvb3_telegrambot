@@ -6,6 +6,7 @@ from aiogram.types import BotCommand, BotCommandScopeDefault, TelegramObject, In
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
 from loguru import logger
+import aiocron
 
 from config import settings
 from loader import bot, dp, storage
@@ -20,15 +21,20 @@ from handlers.callbacks import callback_router
 from handlers.admin import admin_router
 from middlewares.throttling import ThrottlingMiddleware
 from middlewares.auth import AuthMiddleware
+from services.test_service import send_daily_tests
 
 
 # ========== SUBSCRIPTION MIDDLEWARE ==========
 
 class SubscriptionMiddleware(BaseMiddleware):
-    REQUIRED_CHATS = [
-        ("@theteamvb", "📢 Channel", "https://t.me/theteamvb"),
-        ("@teamvb2", "👥 Group", "https://t.me/teamvb2"),
-    ]
+    # Channel/Group IDs config se le rahe hain, nahi to default
+    def __init__(self):
+        channel_id = getattr(settings, 'CHANNEL_ID', None) or "@theteamvb"
+        group_id = getattr(settings, 'GROUP_ID', None) or "@teamvb2"
+        self.REQUIRED_CHATS = [
+            (channel_id, "📢 Channel", f"https://t.me/{channel_id.replace('@', '')}"),
+            (group_id, "👥 Group", f"https://t.me/{group_id.replace('@', '')}"),
+        ]
 
     async def __call__(
         self,
@@ -54,7 +60,6 @@ class SubscriptionMiddleware(BaseMiddleware):
                 if member.status in ["left", "kicked"]:
                     not_joined.append((chat_id, chat_type, chat_url))
             except Exception as e:
-                # ✅ FIX: Check fail hone pe block MAT karo — gracefully pass karo
                 logger.warning(f"Could not check {chat_id} for user {user.id}: {e}")
 
         if not_joined:
@@ -90,6 +95,19 @@ class SubscriptionMiddleware(BaseMiddleware):
         return await handler(event, data)
 
 
+# ========== DAILY TEST SCHEDULER (app.py ke andar hi) ==========
+
+@aiocron.crontab("0 8 * * *")  # Har din subah 8:00 UTC (Indian time 1:30 PM)
+async def daily_test_job():
+    """Sabhi active users ko 5 daily tests bhejein."""
+    try:
+        logger.info("Running daily test job...")
+        await send_daily_tests(bot)
+        logger.info("Daily tests sent successfully")
+    except Exception as e:
+        logger.error(f"Error in daily test job: {e}")
+
+
 # ========== COMMANDS & STARTUP ==========
 
 async def set_commands() -> None:
@@ -109,6 +127,7 @@ async def on_startup() -> None:
     logger.info("Starting bot...")
     await init_db()
     await set_commands()
+
     if settings.SENTRY_DSN:
         import sentry_sdk
         sentry_sdk.init(dsn=settings.SENTRY_DSN, traces_sample_rate=0.1)
@@ -162,16 +181,34 @@ async def main_webhook() -> None:
     register_middlewares()
     register_routers()
     await on_startup()
+
+    # Webhook URL determine karo (Railway ya manual)
+    webhook_url = settings.WEBHOOK_URL
+    if not webhook_url and getattr(settings, 'RAILWAY_PUBLIC_DOMAIN', None):
+        webhook_url = f"https://{settings.RAILWAY_PUBLIC_DOMAIN}/webhook"
+
+    if webhook_url:
+        await bot.set_webhook(
+            url=webhook_url,
+            secret_token=settings.webhook_secret_value,
+            drop_pending_updates=True
+        )
+        logger.info("Webhook set to {}", webhook_url)
+    else:
+        logger.warning("No webhook URL configured – bot won't receive updates in webhook mode!")
+
     app = web.Application()
     webhook_requests_handler = SimpleRequestHandler(dispatcher=dp, bot=bot)
     webhook_requests_handler.register(app, path="/webhook")
     setup_application(app, dp, bot=bot)
+
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", settings.WEBHOOK_PORT)
     await site.start()
     logger.info("Webhook server started on port {}", settings.WEBHOOK_PORT)
     await asyncio.Event().wait()
+
 
 if __name__ == "__main__":
     setup_logging()
@@ -183,4 +220,3 @@ if __name__ == "__main__":
     except (KeyboardInterrupt, SystemExit):
         logger.info("Bot stopped by user")
         sys.exit(0)
-        
