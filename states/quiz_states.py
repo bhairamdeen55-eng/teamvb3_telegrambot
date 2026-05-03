@@ -16,4 +16,5 @@ class DPPStates(StatesGroup):
 class PhotoTestStates(StatesGroup):
     waiting_for_photo = State()
     processing = State()
+    answering = State()
     viewing_result = State()
