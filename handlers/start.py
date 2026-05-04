@@ -4,7 +4,7 @@ from aiogram.filters import CommandStart, Command
 from aiogram.types import Message, FSInputFile
 from aiogram.fsm.context import FSMContext
 from loguru import logger
-from utils.texts import START_TEXT, HELP_TEXT
+from utils.texts import START_TEXT
 from utils.keyboards import main_menu_kb
 from config import settings
 from db.database import async_session_factory
@@ -16,38 +16,8 @@ from pathlib import Path
 
 start_router = Router()
 
-@start_router.message(CommandStart())
-async def start_handler(message: Message, state: FSMContext, command, user=None, session=None):
-    await state.clear()
-    args = command.args
-    if args and args.startswith("test_"):
-        code = args[5:]
-        async with async_session_factory() as session:
-            result = await session.execute(select(SharedTest).where(SharedTest.code == code))
-            shared_test = result.scalar_one_or_none()
-            if not shared_test:
-                await message.answer("❌ यह टेस्ट कोड मान्य नहीं है।")
-                return
-            if shared_test.expires_at < datetime.utcnow():
-                await message.answer("⏰ यह टेस्ट लिंक expired हो गया है।")
-                return
-            await start_shared_test_sessions(
-                user_id=message.from_user.id,
-                message=message,
-                state=state,
-                questions=shared_test.questions
-            )
-            logger.info(f"User {message.from_user.id} started shared test {code}")
-            return
-    # सामान्य /start
-    await message.answer(
-        f"👋 Hello {message.from_user.first_name}!\n\n{START_TEXT}",
-        reply_markup=main_menu_kb(),
-    )
-    logger.info("User started bot: {} ({})", message.from_user.id, message.from_user.first_name)
-
-@start_router.message(Command("help"))
-async def help_handler(message: Message) -> None:
+async def send_help(message: Message):
+    """QR कोड इमेज और सहायता पाठ भेजें (लंबे कैप्शन की समस्या का हल)"""
     help_text = (
         "📚 <b>HELP MENU – TEAMVB BOT 📚</b>\n\n"
         "━━━━━━━━━━━━━━━━━━━\n\n"
@@ -79,19 +49,52 @@ async def help_handler(message: Message) -> None:
         "━━━━━━━━━━━━━━━━━━━\n\n"
         "🔥 <b>TEAMVB — JEE & BOARD ASPIRANTS 🔥</b>"
     )
-    
-    # QR कोड इमेज का path (आपने assets में help_qr.jpg रखा है)
+
+    # पहले इमेज भेजें
     image_path = settings.ASSETS_DIR / "help_qr.jpg"
-    
     if image_path.exists():
         photo = FSInputFile(str(image_path))
-        await message.answer_photo(
-            photo=photo,
-            caption=help_text
-        )
+        # बिना caption के या बहुत छोटे caption के साथ
+        await message.answer_photo(photo=photo, caption="📌 TeamVB Help & Support")
     else:
-        # इमेज नहीं मिली तो केवल टेक्स्ट भेजें
-        await message.answer(help_text)
+        # अगर इमेज नहीं है तो सिर्फ एक लाइन
+        await message.answer("📌 TeamVB Help & Support")
+
+    # फिर पूरा हेल्प टेक्स्ट अलग मैसेज में
+    await message.answer(help_text)
+
+@start_router.message(CommandStart())
+async def start_handler(message: Message, state: FSMContext, command, user=None, session=None):
+    await state.clear()
+    args = command.args
+    if args and args.startswith("test_"):
+        code = args[5:]
+        async with async_session_factory() as session:
+            result = await session.execute(select(SharedTest).where(SharedTest.code == code))
+            shared_test = result.scalar_one_or_none()
+            if not shared_test:
+                await message.answer("❌ यह टेस्ट कोड मान्य नहीं है।")
+                return
+            if shared_test.expires_at < datetime.utcnow():
+                await message.answer("⏰ यह टेस्ट लिंक expired हो गया है।")
+                return
+            await start_shared_test_sessions(
+                user_id=message.from_user.id,
+                message=message,
+                state=state,
+                questions=shared_test.questions
+            )
+            logger.info(f"User {message.from_user.id} started shared test {code}")
+            return
+    await message.answer(
+        f"👋 Hello {message.from_user.first_name}!\n\n{START_TEXT}",
+        reply_markup=main_menu_kb(),
+    )
+    logger.info("User started bot: {} ({})", message.from_user.id, message.from_user.first_name)
+
+@start_router.message(Command("help"))
+async def help_handler(message: Message) -> None:
+    await send_help(message)
 
 @start_router.message(Command("menu"))
 async def menu_handler(message: Message) -> None:
